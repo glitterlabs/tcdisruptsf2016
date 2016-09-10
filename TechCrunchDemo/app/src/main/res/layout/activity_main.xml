@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/activity_capture_blast"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    >
+
+    <TextureView
+        android:id="@+id/texture"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <ImageView android:id="@+id/imgScan"
+        android:visibility="gone"
+        android:layout_width="match_parent" android:src="@drawable/scanline"
+        android:layout_height="wrap_content" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center"
+        android:layout_margin="@dimen/_5sdp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <android.support.design.widget.FloatingActionButton
+            android:id="@+id/fabCapture"
+            android:layout_width="@dimen/_80sdp"
+            android:layout_height="@dimen/_80sdp"
+            android:layout_margin="@dimen/_10sdp"
+            android:src="@drawable/ic_capturebg"
+            app:backgroundTint="#55ffffff"
+            app:borderWidth="@dimen/_2sdp"
+            app:elevation="0dp"
+            app:fabSize="normal"
+            app:rippleColor="#ffffff" />
+    </LinearLayout>
+
+
+</FrameLayout>
