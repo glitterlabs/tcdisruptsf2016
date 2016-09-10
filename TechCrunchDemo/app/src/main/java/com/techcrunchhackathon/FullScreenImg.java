@@ -42,6 +42,7 @@ import java.util.Map;
 
 public class FullScreenImg extends AppCompatActivity {
 
+    private static final String API_KEY = "NWhnKnq8GTrx1zT4yV3_sQ";
     private ImageView imgScan, imgLoad;
     private TranslateAnimation mAnimation;
     private RequestQueue requestQueue;
@@ -160,7 +161,7 @@ public class FullScreenImg extends AppCompatActivity {
             @Override
             public Map<String, String> getHeaders() throws AuthFailureError {
                 Map<String, String> params = new HashMap<>();
-                params.put("Authorization", "CloudSight NWhnKnq8GTrx1zT4yV3_sQ");
+                params.put("Authorization", "CloudSight " + API_KEY);
                 return params;
             }
 
@@ -204,7 +205,7 @@ public class FullScreenImg extends AppCompatActivity {
                         Log.d("Data", res.toString());
                         try {
                             status = res.getString("status");
-                            if (status.equals("not completed")) {
+                            if (status.equals("not completed") || status.equals("dark")) {
                                 getImageResponse(token);
                             } else {
                                 Log.d("Data", res.toString());
@@ -229,7 +230,7 @@ public class FullScreenImg extends AppCompatActivity {
             @Override
             public Map<String, String> getHeaders() throws AuthFailureError {
                 Map<String, String> params = new HashMap<>();
-                params.put("Authorization", "CloudSight NWhnKnq8GTrx1zT4yV3_sQ");
+                params.put("Authorization", "CloudSight " + API_KEY);
                 return params;
             }
         };
@@ -249,6 +250,7 @@ public class FullScreenImg extends AppCompatActivity {
                 txtName.setText(res.getString("name"));
             } catch (JSONException e) {
                 e.printStackTrace();
+                txtName.setText("Error");
             }
 
         }
