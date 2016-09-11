@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.CardView;
@@ -17,6 +18,7 @@ import android.view.animation.LinearInterpolator;
 import android.view.animation.TranslateAnimation;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.android.volley.AuthFailureError;
 import com.android.volley.DefaultRetryPolicy;
@@ -27,6 +29,12 @@ import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
+import com.ibm.watson.developer_cloud.android.library.audio.MicrophoneInputStream;
+import com.ibm.watson.developer_cloud.language_translation.v2.LanguageTranslation;
+import com.ibm.watson.developer_cloud.speech_to_text.v1.RecognizeOptions;
+import com.ibm.watson.developer_cloud.speech_to_text.v1.SpeechToText;
+import com.ibm.watson.developer_cloud.speech_to_text.v1.model.SpeechResults;
+import com.ibm.watson.developer_cloud.speech_to_text.v1.websocket.RecognizeDelegate;
 import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 import com.techcrunchhackathon.utils.AppHelper;
@@ -55,6 +63,10 @@ public class FullScreenImg extends AppCompatActivity {
     private String status;
     TextView txtName;
     private CardView cardResult;
+    private FloatingActionButton fabVoice;
+    private SpeechToText speechService;
+    private LanguageTranslation translationService;
+    private TextView txtOutPut;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,9 +75,14 @@ public class FullScreenImg extends AppCompatActivity {
         imgScan = (ImageView) findViewById(R.id.imgScan);
         imgCaptured = (ImageView) findViewById(R.id.imgCaptured);
         cardResult = (CardView) findViewById(R.id.cardResult);
+        txtOutPut = (TextView) findViewById(R.id.txtOutPut);
+        fabVoice = (FloatingActionButton) findViewById(R.id.fabVoice);
         imgLoad = (ImageView) findViewById(R.id.imgLoad);
         txtName = (TextView) findViewById(R.id.txtName);
         img = getIntent().getStringExtra("IMG");
+
+        speechService = initSpeechToTextService();
+        translationService = initLanguageTranslationService();
         Log.d("img", img);
         //    Bitmap bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
         // imgCaptured.setImageBitmap(bitmap);
@@ -92,7 +109,96 @@ public class FullScreenImg extends AppCompatActivity {
                     }
                 });
 
+        fabVoice.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    fabVoice.setBackgroundTintList(ColorStateList.valueOf(Color
+                                            .parseColor("#00796B")));
+                                }
+                            });
 
+                            speechService.recognizeUsingWebSockets(new MicrophoneInputStream(),
+                                    getRecognizeOptions(), new MicrophoneRecognizeDelegate());
+                        } catch (Exception e) {
+                            showError(e);
+                        }
+                    }
+                }).start();
+            }
+        });
+    }
+
+    private LanguageTranslation initLanguageTranslationService() {
+        LanguageTranslation service = new LanguageTranslation();
+        String username = "0d6eb480-83b0-4fce-a588-f492f0d6432e";
+        String password = "LTTiuZiZaL7M";
+        service.setUsernameAndPassword(username, password);
+        return service;
+    }
+
+
+    private class MicrophoneRecognizeDelegate implements RecognizeDelegate {
+
+        @Override
+        public void onMessage(SpeechResults speechResults) {
+            String text = speechResults.getResults().get(0).getAlternatives().get(0).getTranscript();
+            showMicText(text);
+        }
+
+        @Override
+        public void onConnected() {
+
+        }
+
+        @Override
+        public void onError(Exception e) {
+            showError(e);
+            //      enableMicButton();
+        }
+
+        @Override
+        public void onDisconnected() {
+            //  enableMicButton();
+        }
+    }
+
+    private void showMicText(final String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+
+                // Toast.makeText(FullScreenImg.this, text, Toast.LENGTH_LONG).show();
+                txtOutPut.setText(text);
+                Log.d("Text", text);
+            }
+        });
+    }
+
+    private RecognizeOptions getRecognizeOptions() {
+        RecognizeOptions options = new RecognizeOptions();
+        options.continuous(true);
+        options.contentType(MicrophoneInputStream.CONTENT_TYPE);
+        options.model("en-US_BroadbandModel");
+        options.interimResults(true);
+        options.inactivityTimeout(5000);
+        return options;
+    }
+
+    private void showError(final Exception e) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(FullScreenImg.this, e.getMessage(), Toast.LENGTH_SHORT).show();
+                e.printStackTrace();
+            }
+        });
     }
 
     private void setAnimation() {
@@ -243,8 +349,12 @@ public class FullScreenImg extends AppCompatActivity {
             try {
                 mAnimation.cancel();
                 imgScan.setVisibility(View.GONE);
-
+                imgCaptured.setVisibility(View.GONE);
                 cardResult.setVisibility(View.VISIBLE);
+                if (txtOutPut.getVisibility() == View.GONE) {
+                    txtOutPut.setVisibility(View.VISIBLE);
+                }
+
                 Picasso.with(FullScreenImg.this).load(new File(img)).resize(100, 100)
                         .centerCrop().into(imgLoad);
                 txtName.setText(res.getString("name"));
@@ -257,4 +367,12 @@ public class FullScreenImg extends AppCompatActivity {
 
     }
 
+    private SpeechToText initSpeechToTextService() {
+        SpeechToText service = new SpeechToText();
+        String username = "0d6eb480-83b0-4fce-a588-f492f0d6432e";
+        String password = "LTTiuZiZaL7M";
+        service.setUsernameAndPassword(username, password);
+        service.setEndPoint("https://stream.watsonplatform.net/speech-to-text/api");
+        return service;
+    }
 }
