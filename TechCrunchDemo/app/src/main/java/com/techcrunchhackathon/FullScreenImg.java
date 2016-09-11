@@ -67,6 +67,7 @@ public class FullScreenImg extends AppCompatActivity {
     private SpeechToText speechService;
     private LanguageTranslation translationService;
     private TextView txtOutPut;
+    private String outpputText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -175,6 +176,7 @@ public class FullScreenImg extends AppCompatActivity {
             public void run() {
 
                 // Toast.makeText(FullScreenImg.this, text, Toast.LENGTH_LONG).show();
+                outpputText=text;
                 txtOutPut.setText(text);
                 Log.d("Text", text);
             }
