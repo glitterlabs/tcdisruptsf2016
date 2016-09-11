@@ -51,6 +51,8 @@ dependencies {
     compile 'com.ibm.watson.developer_cloud:java-sdk:2.10.0'
     compile project(':watsonlib')
     compile 'com.squareup.okhttp:okhttp:2.0.0'
+   compile  'com.ibm.watson.developer_cloud:java-sdk:3.3.1'
+
     // https://mvnrepository.com/artifact/com.squareup.okhttp/okhttp-urlconnection
     compile group: 'com.squareup.okhttp', name: 'okhttp-urlconnection', version: '2.2.0'
 

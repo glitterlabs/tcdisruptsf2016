@@ -1,15 +1,20 @@
 package com.techcrunchhackathon;
 
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
+import android.media.MediaRecorder;
+import android.os.AsyncTask;
+import android.os.Environment;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.support.v7.widget.CardView;
+import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Display;
 import android.view.View;
@@ -29,12 +34,27 @@ import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.ibm.watson.developer_cloud.android.library.audio.MicrophoneInputStream;
+
+import com.ibm.watson.developer_cloud.android.library.audio.StreamPlayer;
+import com.ibm.watson.developer_cloud.conversation.v1.ConversationService;
+import com.ibm.watson.developer_cloud.conversation.v1.model.MessageRequest;
+import com.ibm.watson.developer_cloud.conversation.v1.model.MessageResponse;
+import com.ibm.watson.developer_cloud.http.HttpMediaType;
 import com.ibm.watson.developer_cloud.language_translation.v2.LanguageTranslation;
-import com.ibm.watson.developer_cloud.speech_to_text.v1.RecognizeOptions;
+import com.ibm.watson.developer_cloud.speech_to_text.v1.model.RecognizeOptions;
+import com.ibm.watson.developer_cloud.speech_to_text.v1.model.Transcript;
+import com.ibm.watson.developer_cloud.speech_to_text.v1.websocket.BaseRecognizeCallback;
+
 import com.ibm.watson.developer_cloud.speech_to_text.v1.SpeechToText;
 import com.ibm.watson.developer_cloud.speech_to_text.v1.model.SpeechResults;
-import com.ibm.watson.developer_cloud.speech_to_text.v1.websocket.RecognizeDelegate;
+
+import com.ibm.watson.developer_cloud.text_to_speech.v1.TextToSpeech;
+import com.ibm.watson.developer_cloud.text_to_speech.v1.model.AudioFormat;
+import com.ibm.watson.developer_cloud.text_to_speech.v1.model.Voice;
+import com.ibm.watson.developer_cloud.text_to_speech.v1.util.WaveUtils;
 import com.squareup.picasso.Callback;
 import com.squareup.picasso.Picasso;
 import com.techcrunchhackathon.utils.AppHelper;
@@ -45,14 +65,29 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class FullScreenImg extends AppCompatActivity {
-
+    private static final String WORKPACE_ID = "0d6a382d-dbf4-4a82-a984-7f0cd54a764b";
+    private static final String USER_NAME = "0d6eb480-83b0-4fce-a588-f492f0d6432e";
+    private static final String PASSWORD = "LTTiuZiZaL7M";
+    private static final String CON_USER_NAME = "da8ba92d-db2c-4cc3-8a59-115ba249ccc3";
+    private static final String CON_PASSWORD = "C7KrV3WpDIuG";
+    private static final String T2S_USERNAME = "2b3a7bd8-9ded-433d-9bb9-e2ddce37f7d6";
+    private static final String T2S_PASSWORD = "8cXO4oAsnp3v";
+    int sampleRate = 16000;
     private static final String API_KEY = "NWhnKnq8GTrx1zT4yV3_sQ";
     private ImageView imgScan, imgLoad;
     private TranslateAnimation mAnimation;
+    private StreamPlayer player = new StreamPlayer();
     private RequestQueue requestQueue;
     private String image_requests = "https://api.cloudsightapi.com/image_requests";
     private String image_responses = "https://api.cloudsightapi.com/image_responses/";
@@ -68,6 +103,15 @@ public class FullScreenImg extends AppCompatActivity {
     private LanguageTranslation translationService;
     private TextView txtOutPut;
     private String outpputText;
+    private List<Transcript> speechResultses;
+    private Toolbar toolbar;
+    private ConversationService conService;
+    private MessageResponse response;
+    private MessageRequest newMessage;
+    private String talkText;
+    private TextToSpeech textService;
+    private File file;
+    private String intent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,9 +125,14 @@ public class FullScreenImg extends AppCompatActivity {
         imgLoad = (ImageView) findViewById(R.id.imgLoad);
         txtName = (TextView) findViewById(R.id.txtName);
         img = getIntent().getStringExtra("IMG");
-
+        toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        toolbar.setTitle("Scanning....");
         speechService = initSpeechToTextService();
+        textService = initTextToSpeechService();
         translationService = initLanguageTranslationService();
+        initConversationService();
+        file = new File(Environment.getExternalStorageDirectory() + "/play.wav");
         Log.d("img", img);
         //    Bitmap bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
         // imgCaptured.setImageBitmap(bitmap);
@@ -124,9 +173,28 @@ public class FullScreenImg extends AppCompatActivity {
                                             .parseColor("#00796B")));
                                 }
                             });
+                            RecognizeOptions options = new RecognizeOptions.Builder()
+                                    .continuous(true)
+                                    .interimResults(true)
+                                    .timestamps(true)
+                                    .wordConfidence(true)
 
-                            speechService.recognizeUsingWebSockets(new MicrophoneInputStream(),
-                                    getRecognizeOptions(), new MicrophoneRecognizeDelegate());
+                                    .inactivityTimeout(5) // use this to stop listening when the speaker pauses, i.e. for 5s
+                                    .contentType(HttpMediaType.AUDIO_RAW + "; rate=" + sampleRate)
+                                    .build();
+
+                            speechService.recognizeUsingWebSocket(new MicrophoneInputStream(), options, new BaseRecognizeCallback() {
+                                @Override
+                                public void onTranscription(SpeechResults speechResults) {
+                                    super.onTranscription(speechResults);
+                                    speechResultses = speechResults.getResults();
+
+                                    String text = speechResults.getResults().get(0).getAlternatives().get(0).getTranscript();
+                                    System.out.println(text);
+                                    showMicText(text);
+                                }
+                            });
+
                         } catch (Exception e) {
                             showError(e);
                         }
@@ -145,30 +213,30 @@ public class FullScreenImg extends AppCompatActivity {
     }
 
 
-    private class MicrophoneRecognizeDelegate implements RecognizeDelegate {
-
-        @Override
-        public void onMessage(SpeechResults speechResults) {
-            String text = speechResults.getResults().get(0).getAlternatives().get(0).getTranscript();
-            showMicText(text);
-        }
-
-        @Override
-        public void onConnected() {
-
-        }
-
-        @Override
-        public void onError(Exception e) {
-            showError(e);
-            //      enableMicButton();
-        }
-
-        @Override
-        public void onDisconnected() {
-            //  enableMicButton();
-        }
-    }
+//    private class MicrophoneRecognizeDelegate implements RecognizeDelegate {
+//
+//        @Override
+//        public void onMessage(SpeechResults speechResults) {
+//            String text = speechResults.getResults().get(0).getAlternatives().get(0).getTranscript();
+//            showMicText(text);
+//        }
+//
+//        @Override
+//        public void onConnected() {
+//
+//        }
+//
+//        @Override
+//        public void onError(Exception e) {
+//            showError(e);
+//            //      enableMicButton();
+//        }
+//
+//        @Override
+//        public void onDisconnected() {
+//            //  enableMicButton();
+//        }
+//    }
 
     private void showMicText(final String text) {
         runOnUiThread(new Runnable() {
@@ -176,21 +244,96 @@ public class FullScreenImg extends AppCompatActivity {
             public void run() {
 
                 // Toast.makeText(FullScreenImg.this, text, Toast.LENGTH_LONG).show();
-                outpputText=text;
+                outpputText = text;
                 txtOutPut.setText(text);
                 Log.d("Text", text);
+                sendConverstation(text);
             }
         });
     }
 
-    private RecognizeOptions getRecognizeOptions() {
-        RecognizeOptions options = new RecognizeOptions();
-        options.continuous(true);
-        options.contentType(MicrophoneInputStream.CONTENT_TYPE);
-        options.model("en-US_BroadbandModel");
-        options.interimResults(true);
-        options.inactivityTimeout(5000);
-        return options;
+    private void sendConverstation(String text) {
+        new SendConversation().execute(text, "", "");
+
+    }
+
+    class SendConversation extends AsyncTask<String, String, String> {
+
+        @Override
+        protected String doInBackground(String... strings) {
+            String txt = strings[0];
+            newMessage = new MessageRequest.Builder().inputText(txt).build();
+            response = conService.message(WORKPACE_ID, newMessage).execute();
+            return "ok";
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            if (s.equals("ok")) {
+                Log.d("RES", response.toString());
+                parseConvResponse(response.toString());
+
+            }
+            super.onPostExecute(s);
+        }
+    }
+
+    private void parseConvResponse(String s) {
+
+        try {
+            JSONObject json = new JSONObject(s);
+            talkText = json.getJSONObject("output").getJSONArray("text").get(0).toString();
+            intent = json.getJSONArray("intents").getJSONObject(0).getString("intent");
+            Log.d("Talk", talkText);
+            Log.d("intent", intent);
+            //
+            showIntents();
+
+            new SynthesisTask().execute(talkText, "", "");
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void showIntents() {
+        if (intent.equals("hello disrupt")) {
+
+        } else if (intent.equals("Show products")) {
+            Intent in = new Intent(FullScreenImg.this, ShowProducts.class);
+            in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(in);
+        } else if (intent.equals("judges")) {
+            Intent in = new Intent(FullScreenImg.this, ShowJudgesActivity.class);
+            in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(in);
+        } else if (intent.equals(" Show recent posts")) {
+
+        }
+    }
+
+    private class SynthesisTask extends AsyncTask<String, Void, String> {
+
+        @Override
+        protected String doInBackground(String... params) {
+            try {
+
+                InputStream stream = textService.synthesize(params[0], Voice.EN_ALLISON, AudioFormat.WAV).execute();
+                player.playStream(stream);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return "ok";
+        }
+
+        @Override
+        protected void onPostExecute(String s) {
+            super.onPostExecute(s);
+
+            if (s.equals("ok")) {
+
+            }
+        }
     }
 
     private void showError(final Exception e) {
@@ -237,7 +380,6 @@ public class FullScreenImg extends AppCompatActivity {
                 try {
                     JSONObject result = new JSONObject(resultResponse);
                     String token = result.getString("token");
-
                     getImageResponse(token);
 
                     Log.d("Response", result.toString());
@@ -353,6 +495,8 @@ public class FullScreenImg extends AppCompatActivity {
                 imgScan.setVisibility(View.GONE);
                 imgCaptured.setVisibility(View.GONE);
                 cardResult.setVisibility(View.VISIBLE);
+                fabVoice.setVisibility(View.VISIBLE);
+                toolbar.setTitle("Context");
                 if (txtOutPut.getVisibility() == View.GONE) {
                     txtOutPut.setVisibility(View.VISIBLE);
                 }
@@ -369,12 +513,26 @@ public class FullScreenImg extends AppCompatActivity {
 
     }
 
+    private void initConversationService() {
+        conService = new ConversationService(ConversationService.VERSION_DATE_2016_07_11);
+        conService.setUsernameAndPassword(CON_USER_NAME, CON_PASSWORD);
+
+    }
+
     private SpeechToText initSpeechToTextService() {
         SpeechToText service = new SpeechToText();
-        String username = "0d6eb480-83b0-4fce-a588-f492f0d6432e";
-        String password = "LTTiuZiZaL7M";
+        String username = USER_NAME;
+        String password = PASSWORD;
         service.setUsernameAndPassword(username, password);
         service.setEndPoint("https://stream.watsonplatform.net/speech-to-text/api");
+        return service;
+    }
+
+    private TextToSpeech initTextToSpeechService() {
+        TextToSpeech service = new TextToSpeech();
+        String username = T2S_USERNAME;
+        String password = T2S_PASSWORD;
+        service.setUsernameAndPassword(username, password);
         return service;
     }
 }
