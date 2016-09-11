@@ -298,7 +298,7 @@ public class FullScreenImg extends AppCompatActivity {
     private void showIntents() {
         if (intent.equals("hello disrupt")) {
 
-        } else if (intent.equals("Show products")) {
+        } else if (intent.equals("product")) {
             Intent in = new Intent(FullScreenImg.this, ShowProducts.class);
             in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(in);
